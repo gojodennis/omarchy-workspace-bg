@@ -1,0 +1,130 @@
+#!/bin/bash
+
+# Configuration
+CONFIG_DIR="$HOME/.config/omarchy/workspace-bg"
+CONFIG_FILE="$CONFIG_DIR/config.conf"
+DAEMON_NAME="omarchy-workspace-bg-daemon"
+
+# Ensure config directory exists
+mkdir -p "$CONFIG_DIR"
+touch "$CONFIG_FILE"
+
+# Colors and Styles
+HEADER_STYLE="gum style --foreground 212 --border-foreground 212 --border double --align center --width 50 --margin \"1 2\" --padding \"2 4\""
+ITEM_STYLE="gum style --foreground 212"
+
+# Helper function to header
+show_header() {
+    clear
+    echo "Omarchy Workspace Backgrounds" | $HEADER_STYLE
+}
+
+# Helper to reload daemon
+reload_daemon() {
+    if pgrep -f "$DAEMON_NAME" > /dev/null; then
+        # If installed in path
+        if command -v "$DAEMON_NAME" &> /dev/null; then
+            "$DAEMON_NAME" --reload
+        else
+            # Try to find it relative to this script if running from source/bin
+            SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
+            if [ -x "$SCRIPT_DIR/$DAEMON_NAME" ]; then
+                "$SCRIPT_DIR/$DAEMON_NAME" --reload
+            fi
+        fi
+        gum style --foreground 76 "✓ Daemon reloaded"
+    else
+        gum style --foreground 196 "✗ Daemon not running"
+    fi
+}
+
+configure_workspace() {
+    echo "Select Workspace ID:"
+    WS_ID=$(gum input --placeholder "e.g., 1" --char-limit 2)
+
+    if [ -z "$WS_ID" ]; then
+        return
+    fi
+
+    # Check if integer
+    if ! [[ "$WS_ID" =~ ^[0-9]+$ ]]; then
+        gum style --foreground 196 "Invalid workspace ID"
+        sleep 1
+        return
+    fi
+
+    echo "Select Wallpaper Image:"
+    # Default to Pictures folder
+    START_DIR="$HOME/Pictures"
+    if [ ! -d "$START_DIR" ]; then
+        START_DIR="$HOME"
+    fi
+
+    IMAGE_PATH=$(gum file "$START_DIR" --height 15)
+
+    if [ -z "$IMAGE_PATH" ]; then
+        return
+    fi
+
+    # Remove existing entry for this workspace
+    # create temp file
+    grep -v "^${WS_ID}=" "$CONFIG_FILE" > "${CONFIG_FILE}.tmp"
+    mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
+
+    # Add new entry
+    echo "${WS_ID}=${IMAGE_PATH}" >> "$CONFIG_FILE"
+
+    gum style --foreground 76 "✓ Configured Workspace $WS_ID"
+
+    # Ask to reload
+    if gum confirm "Reload configuration now?"; then
+        reload_daemon
+    fi
+}
+
+view_config() {
+    if [ ! -s "$CONFIG_FILE" ]; then
+        gum style --italic "Configuration is empty"
+    else
+        cat "$CONFIG_FILE" | gum table --border normal --columns "Workspace,Path" --print
+    fi
+    gum input --placeholder "Press Enter to return..." > /dev/null
+}
+
+# Main Loop
+while true; do
+    show_header
+
+    CHOICE=$(gum choose "Configure Workspace Wallpaper" "View Current Config" "Restart Daemon" "Exit" --height 10 --header "Select an action")
+
+    case "$CHOICE" in
+        "Configure Workspace Wallpaper")
+            configure_workspace
+            ;;
+        "View Current Config")
+            view_config
+            ;;
+        "Restart Daemon")
+            gum spin --spinner dot --title "Restarting daemon..." -- sleep 1
+            pkill -f "$DAEMON_NAME"
+            # Attempt to start it
+            if command -v "$DAEMON_NAME" &> /dev/null; then
+                "$DAEMON_NAME" &
+                gum style --foreground 76 "✓ Daemon started"
+            else
+                 SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
+                if [ -x "$SCRIPT_DIR/$DAEMON_NAME" ]; then
+                    "$SCRIPT_DIR/$DAEMON_NAME" &
+                     gum style --foreground 76 "✓ Daemon started"
+                else
+                    gum style --foreground 196 "Could not find daemon script to start"
+                fi
+            fi
+            sleep 1
+            ;;
+        "Exit")
+            clear
+            exit 0
+            ;;
+    esac
+done

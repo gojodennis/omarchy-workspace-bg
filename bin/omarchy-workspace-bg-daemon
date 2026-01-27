@@ -6,8 +6,15 @@ CONFIG_FILE="$CONFIG_DIR/config.conf"
 # Fallback to omarchy default if available, otherwise just use a placeholder or nothing
 DEFAULT_BG_LINK="$HOME/.config/omarchy/current/background"
 
-# Default transition args (can be overridden by env vars if needed)
-TRANSITION_ARGS="${TRANSITION_ARGS:-"--transition-type grow --transition-pos 0.5,0.5 --transition-fps 60 --transition-step 90 --transition-duration 0.5"}"
+# Default transition args (can be overridden by config or env vars)
+DEFAULT_TRANSITION="--transition-type grow --transition-pos 0.5,0.5 --transition-fps 60 --transition-step 90 --transition-duration 0.5"
+
+# Load transition args from config if present
+if [ -f "$CONFIG_FILE" ]; then
+    FILE_TRANSITION=$(grep "^TRANSITION_ARGS=" "$CONFIG_FILE" | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+fi
+
+TRANSITION_ARGS="${TRANSITION_ARGS:-${FILE_TRANSITION:-$DEFAULT_TRANSITION}}"
 
 # Check dependencies
 for cmd in swww socat jq; do

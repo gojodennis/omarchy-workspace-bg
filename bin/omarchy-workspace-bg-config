@@ -82,11 +82,46 @@ configure_workspace() {
     fi
 }
 
+configure_animations() {
+    echo "Select Transition Type:"
+    TYPE=$(gum choose "simple" "grow" "outer" "center" "any" "random" "wipe" "wave" --height 10)
+
+    if [ -z "$TYPE" ]; then return; fi
+
+    echo "Enter Duration (seconds):"
+    DURATION=$(gum input --placeholder "0.5" --value "0.5")
+
+    echo "Enter FPS:"
+    FPS=$(gum input --placeholder "60" --value "60")
+
+    # Construct args
+    # defaults: --transition-pos 0.5,0.5 --transition-step 90
+    NEW_ARGS="--transition-type $TYPE --transition-duration $DURATION --transition-fps $FPS --transition-pos 0.5,0.5 --transition-step 90"
+
+    # Save to config
+    # Remove existing line if present
+    grep -v "^TRANSITION_ARGS=" "$CONFIG_FILE" > "${CONFIG_FILE}.tmp"
+    mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
+
+    echo "TRANSITION_ARGS=\"$NEW_ARGS\"" >> "$CONFIG_FILE"
+
+    gum style --foreground 76 "✓ Animation settings saved"
+
+    if gum confirm "Reload daemon to apply?"; then
+        reload_daemon
+    fi
+}
+
 view_config() {
     if [ ! -s "$CONFIG_FILE" ]; then
         gum style --italic "Configuration is empty"
     else
-        cat "$CONFIG_FILE" | gum table --border normal --columns "Workspace,Path" --print
+        echo "## Wallpapers"
+        grep -v "^TRANSITION_ARGS=" "$CONFIG_FILE" | gum table --border normal --columns "Workspace,Path" --print
+
+        echo ""
+        echo "## Animation Settings"
+        grep "^TRANSITION_ARGS=" "$CONFIG_FILE" | cut -d'=' -f2- | tr -d '"' || echo "Default"
     fi
     gum input --placeholder "Press Enter to return..." > /dev/null
 }
@@ -95,11 +130,14 @@ view_config() {
 while true; do
     show_header
 
-    CHOICE=$(gum choose "Configure Workspace Wallpaper" "View Current Config" "Restart Daemon" "Exit" --height 10 --header "Select an action")
+    CHOICE=$(gum choose "Configure Workspace Wallpaper" "Configure Animations" "View Current Config" "Restart Daemon" "Exit" --height 10 --header "Select an action")
 
     case "$CHOICE" in
         "Configure Workspace Wallpaper")
             configure_workspace
+            ;;
+        "Configure Animations")
+            configure_animations
             ;;
         "View Current Config")
             view_config

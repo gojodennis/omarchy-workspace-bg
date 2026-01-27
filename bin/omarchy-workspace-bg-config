@@ -147,13 +147,13 @@ while true; do
             pkill -f "$DAEMON_NAME"
             # Attempt to start it
             if command -v "$DAEMON_NAME" &> /dev/null; then
-                "$DAEMON_NAME" &
-                gum style --foreground 76 "✓ Daemon started"
+                nohup "$DAEMON_NAME" >/dev/null 2>&1 &
+                gum style --foreground 76 "✓ Daemon started in background"
             else
                  SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
                 if [ -x "$SCRIPT_DIR/$DAEMON_NAME" ]; then
-                    "$SCRIPT_DIR/$DAEMON_NAME" &
-                     gum style --foreground 76 "✓ Daemon started"
+                    nohup "$SCRIPT_DIR/$DAEMON_NAME" >/dev/null 2>&1 &
+                     gum style --foreground 76 "✓ Daemon started in background"
                 else
                     gum style --foreground 196 "Could not find daemon script to start"
                 fi

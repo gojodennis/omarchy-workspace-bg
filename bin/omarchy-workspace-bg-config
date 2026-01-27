@@ -130,7 +130,7 @@ view_config() {
 while true; do
     show_header
 
-    CHOICE=$(gum choose "Configure Workspace Wallpaper" "Configure Animations" "View Current Config" "Restart Daemon" "Exit" --height 10 --header "Select an action")
+    CHOICE=$(gum choose "Configure Workspace Wallpaper" "Configure Animations" "View Current Config" "Restart Daemon" "Stop Daemon" "Exit" --height 10 --header "Select an action")
 
     case "$CHOICE" in
         "Configure Workspace Wallpaper")
@@ -157,6 +157,15 @@ while true; do
                 else
                     gum style --foreground 196 "Could not find daemon script to start"
                 fi
+            fi
+            sleep 1
+            ;;
+        "Stop Daemon")
+            if pgrep -f "$DAEMON_NAME" > /dev/null; then
+                pkill -f "$DAEMON_NAME"
+                gum style --foreground 76 "✓ Daemon stopped"
+            else
+                gum style --foreground 196 "Daemon is not running"
             fi
             sleep 1
             ;;

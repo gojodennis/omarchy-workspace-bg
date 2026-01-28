@@ -10,13 +10,13 @@ mkdir -p "$CONFIG_DIR"
 touch "$CONFIG_FILE"
 
 # Colors and Styles
-HEADER_STYLE="gum style --foreground 212 --border-foreground 212 --border double --align center --width 50 --margin \"1 2\" --padding \"2 4\""
-ITEM_STYLE="gum style --foreground 212"
+# HEADER_STYLE definition removed to prevent argument parsing errors
 
 # Helper function to header
 show_header() {
     clear
-    echo "Omarchy Workspace Backgrounds" | $HEADER_STYLE
+    # Use simpler styling to avoid argument parsing issues
+    echo "Omarchy Workspace Backgrounds" | gum style --foreground 212 --border-foreground 212 --border double --align center --width 50 --margin 1 --padding 1 2>/dev/null
 }
 
 # Helper to reload daemon

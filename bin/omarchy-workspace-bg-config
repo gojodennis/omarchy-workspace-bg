@@ -249,7 +249,7 @@ configure_autostart() {
                 fi
                 echo "" >> "$AUTOSTART_FILE"
                 echo "# Omarchy Workspace Backgrounds" >> "$AUTOSTART_FILE"
-                echo "exec-once = omarchy-workspace-bg-daemon" >> "$AUTOSTART_FILE"
+                echo "exec-once = $HOME/.local/bin/omarchy-workspace-bg-daemon" >> "$AUTOSTART_FILE"
                 gum style --foreground 76 "✓ Enabled autostart"
             fi
             ;;

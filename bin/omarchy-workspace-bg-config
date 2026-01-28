@@ -58,7 +58,16 @@ configure_all_workspaces() {
             START_DIR="$HOME"
         fi
 
-        IMAGE_PATH=$(gum file "$START_DIR" --height 15)
+        # Use fzf with chafa for preview if available, otherwise fallback to gum
+        if command -v fzf &> /dev/null && command -v chafa &> /dev/null; then
+             # Find images (png, jpg, jpeg, gif, webp)
+             # We use a subshell to change dir safely for find, but return absolute paths
+             IMAGE_PATH=$(find "$START_DIR" -type f \( -iname "*.png" -o -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.gif" -o -iname "*.webp" \) | \
+                fzf --height 80% --layout=reverse --border --prompt="Select Wallpaper > " \
+                --preview 'chafa -s 60x30 {}' --preview-window=right:50%)
+        else
+             IMAGE_PATH=$(gum file "$START_DIR" --height 15)
+        fi
 
         if [ -n "$IMAGE_PATH" ]; then
             # Remove existing entry for this workspace
@@ -109,7 +118,15 @@ configure_workspace() {
                 START_DIR="$HOME"
             fi
 
-            IMAGE_PATH=$(gum file "$START_DIR" --height 15)
+            # Use fzf with chafa for preview if available, otherwise fallback to gum
+            if command -v fzf &> /dev/null && command -v chafa &> /dev/null; then
+                 # Find images (png, jpg, jpeg, gif, webp)
+                 IMAGE_PATH=$(find "$START_DIR" -type f \( -iname "*.png" -o -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.gif" -o -iname "*.webp" \) | \
+                    fzf --height 80% --layout=reverse --border --prompt="Select Wallpaper > " \
+                    --preview 'chafa -s 60x30 {}' --preview-window=right:50%)
+            else
+                 IMAGE_PATH=$(gum file "$START_DIR" --height 15)
+            fi
 
             if [ -z "$IMAGE_PATH" ]; then
                 return

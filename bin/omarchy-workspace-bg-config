@@ -38,48 +38,105 @@ reload_daemon() {
     fi
 }
 
-configure_workspace() {
-    echo "Select Workspace ID:"
-    WS_ID=$(gum input --placeholder "e.g., 1" --char-limit 2)
+configure_all_workspaces() {
+    echo "Configure All Workspaces (1-10)"
+    echo "This will guide you through setting a wallpaper for each workspace sequentially."
 
-    if [ -z "$WS_ID" ]; then
+    if ! gum confirm "Are you ready to start?"; then
         return
     fi
 
-    # Check if integer
-    if ! [[ "$WS_ID" =~ ^[0-9]+$ ]]; then
-        gum style --foreground 196 "Invalid workspace ID"
-        sleep 1
-        return
-    fi
+    # Loop from 1 to 10
+    for WS_ID in {1..10}; do
+        clear
+        echo "Omarchy Workspace Backgrounds" | $HEADER_STYLE
+        echo "Selecting wallpaper for Workspace $WS_ID..."
 
-    echo "Select Wallpaper Image:"
-    # Default to Pictures folder
-    START_DIR="$HOME/Pictures"
-    if [ ! -d "$START_DIR" ]; then
-        START_DIR="$HOME"
-    fi
+        # Default to Pictures folder
+        START_DIR="$HOME/Pictures"
+        if [ ! -d "$START_DIR" ]; then
+            START_DIR="$HOME"
+        fi
 
-    IMAGE_PATH=$(gum file "$START_DIR" --height 15)
+        IMAGE_PATH=$(gum file "$START_DIR" --height 15)
 
-    if [ -z "$IMAGE_PATH" ]; then
-        return
-    fi
+        if [ -n "$IMAGE_PATH" ]; then
+            # Remove existing entry for this workspace
+            grep -v "^${WS_ID}=" "$CONFIG_FILE" > "${CONFIG_FILE}.tmp"
+            mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
 
-    # Remove existing entry for this workspace
-    # create temp file
-    grep -v "^${WS_ID}=" "$CONFIG_FILE" > "${CONFIG_FILE}.tmp"
-    mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
+            # Add new entry
+            echo "${WS_ID}=${IMAGE_PATH}" >> "$CONFIG_FILE"
+            gum style --foreground 76 "✓ Set Workspace $WS_ID"
+            sleep 0.5
+        else
+            gum style --foreground 220 "Skipped Workspace $WS_ID"
+            sleep 0.5
+        fi
+    done
 
-    # Add new entry
-    echo "${WS_ID}=${IMAGE_PATH}" >> "$CONFIG_FILE"
-
-    gum style --foreground 76 "✓ Configured Workspace $WS_ID"
+    gum style --foreground 76 "✓ Configuration complete for all workspaces"
 
     # Ask to reload
     if gum confirm "Reload configuration now?"; then
         reload_daemon
     fi
+}
+
+configure_workspace() {
+    ACTION=$(gum choose "Single Workspace" "All Workspaces (Sequential)" "Back")
+
+    case "$ACTION" in
+        "Single Workspace")
+            echo "Select Workspace ID:"
+            WS_ID=$(gum input --placeholder "e.g., 1" --char-limit 2)
+
+            if [ -z "$WS_ID" ]; then
+                return
+            fi
+
+            # Check if integer
+            if ! [[ "$WS_ID" =~ ^[0-9]+$ ]]; then
+                gum style --foreground 196 "Invalid workspace ID"
+                sleep 1
+                return
+            fi
+
+            echo "Select Wallpaper Image:"
+            # Default to Pictures folder
+            START_DIR="$HOME/Pictures"
+            if [ ! -d "$START_DIR" ]; then
+                START_DIR="$HOME"
+            fi
+
+            IMAGE_PATH=$(gum file "$START_DIR" --height 15)
+
+            if [ -z "$IMAGE_PATH" ]; then
+                return
+            fi
+
+            # Remove existing entry for this workspace
+            # create temp file
+            grep -v "^${WS_ID}=" "$CONFIG_FILE" > "${CONFIG_FILE}.tmp"
+            mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
+
+            # Add new entry
+            echo "${WS_ID}=${IMAGE_PATH}" >> "$CONFIG_FILE"
+
+            gum style --foreground 76 "✓ Configured Workspace $WS_ID"
+
+            # Ask to reload
+            if gum confirm "Reload configuration now?"; then
+                reload_daemon
+            fi
+            ;;
+        "All Workspaces (Sequential)")
+            configure_all_workspaces
+            ;;
+        "Back")
+            return
+            ;;
+    esac
 }
 
 configure_animations() {

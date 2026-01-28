@@ -16,14 +16,11 @@ fi
 
 TRANSITION_ARGS="${TRANSITION_ARGS:-${FILE_TRANSITION:-$DEFAULT_TRANSITION}}"
 
-# Check dependencies
-for cmd in swww socat jq; do
-    if ! command -v $cmd &> /dev/null; then
-        echo "Error: $cmd is required but not installed." >&2
-        notify-send "Omarchy Workspace BG" "Error: $cmd not found"
-        exit 1
-    fi
-done
+# Check optional dependencies
+HAS_MPVPAPER=false
+if command -v mpvpaper &> /dev/null; then
+    HAS_MPVPAPER=true
+fi
 
 # Ensure config directory exists
 mkdir -p "$CONFIG_DIR"
@@ -39,12 +36,29 @@ fi
 # Kill conflicting wallpaper daemons (optional, maybe user wants to manage this manually, but for omarchy integration strictly:
 pkill swaybg 2>/dev/null
 pkill hyprpaper 2>/dev/null
+# Note: we don't kill mpvpaper here because we might manage multiple instances of it
 
 # Check if swww-daemon is running, if not start it
 if ! pgrep -x "swww-daemon" > /dev/null; then
     swww-daemon &
     sleep 0.5
 fi
+
+# Helper to check if file is video
+is_video() {
+    local file="$1"
+    # Basic mime type check or extension check
+    if [[ "$file" =~ \.(mp4|webm|mkv|mov|avi)$ ]]; then
+        return 0
+    fi
+    # Use file command for better accuracy if available
+    if command -v file &> /dev/null; then
+        if file --mime-type "$file" | grep -q "video/"; then
+            return 0
+        fi
+    fi
+    return 1
+}
 
 # Function to get wallpaper for workspace
 get_wallpaper_for_workspace() {
@@ -65,17 +79,72 @@ get_wallpaper_for_workspace() {
     echo "$bg"
 }
 
+# Helper to find monitor for a workspace
+get_monitor_for_workspace() {
+    local ws=$1
+    # Check if workspace is active and on which monitor
+    # hyprctl workspaces lists all workspaces
+    hyprctl workspaces -j | jq -r ".[] | select(.id == $ws) | .monitor"
+}
+
+# Helper to find all monitors
+get_all_monitors() {
+    hyprctl monitors -j | jq -r '.[].name'
+}
+
 # Apply wallpaper for a specific workspace
 apply_wallpaper() {
     local ws=$1
     local bg=$(get_wallpaper_for_workspace "$ws")
 
     if [ -n "$bg" ]; then
-        swww img "$bg" $TRANSITION_ARGS
+        local mon=$(get_monitor_for_workspace "$ws")
 
-        # Run wallpaper-update hook if it exists
-        if [ -x "$HOME/.config/omarchy/hooks/wallpaper-update" ]; then
-            "$HOME/.config/omarchy/hooks/wallpaper-update" "$bg" &
+        # If workspace is not currently active on any monitor (it's hidden/inactive),
+        # we don't strictly need to do anything until it becomes visible.
+        # But if it IS visible, we must update it.
+
+        # Fallback: if we can't find monitor (maybe it's not created yet or logic failed),
+        # try to apply to all or focused? No, stick to target if possible.
+
+        # If no monitor found, maybe just use focused one if it's the current workspace
+        if [ -z "$mon" ]; then
+             local current_ws=$(hyprctl activeworkspace -j | jq -r '.id')
+             if [ "$ws" == "$current_ws" ]; then
+                 mon=$(hyprctl activeworkspace -j | jq -r '.monitor')
+             fi
+        fi
+
+        if $HAS_MPVPAPER && is_video "$bg"; then
+            # Video Wallpaper Logic
+            if [ -n "$mon" ]; then
+                # Kill any existing mpvpaper on this monitor
+                # Use strict pattern matching to avoid killing unrelated processes
+                # Pattern: mpvpaper ... <monitor_name> ...
+                # pkill -f matches full command line.
+                pkill -f "mpvpaper.*$mon" 2>/dev/null
+
+                # Wait a tiny bit for cleanup
+                sleep 0.1
+
+                # Start new mpvpaper
+                # We fork it so it runs in background
+                # Using nohup to detach completely
+                # Using verbose output for debugging if needed, but suppressed here
+                nohup mpvpaper -o "no-audio loop" "$mon" "$bg" >/dev/null 2>&1 &
+            fi
+        else
+            # Image Wallpaper Logic
+            if [ -n "$mon" ]; then
+                 pkill -f "mpvpaper.*$mon" 2>/dev/null
+            fi
+
+            swww img "$bg" $TRANSITION_ARGS
+
+            # Run wallpaper-update hook if it exists
+            if [ -x "$HOME/.config/omarchy/hooks/wallpaper-update" ]; then
+                "$HOME/.config/omarchy/hooks/wallpaper-update" "$bg" &
+            fi
         fi
     fi
 }

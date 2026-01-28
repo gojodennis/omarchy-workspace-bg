@@ -10,7 +10,7 @@ echo -e "${GREEN}Installing Omarchy Workspace Backgrounds...${NC}"
 
 # 1. Check Dependencies
 echo "Checking dependencies..."
-DEPS=(swww socat jq gum)
+DEPS=(swww socat jq gum fzf chafa)
 MISSING=()
 
 for dep in "${DEPS[@]}"; do
@@ -22,7 +22,7 @@ done
 if [ ${#MISSING[@]} -ne 0 ]; then
     echo -e "${RED}Error: Missing dependencies: ${MISSING[*]}${NC}"
     echo "Please install them using your package manager."
-    echo "Example: yay -S swww socat jq gum"
+    echo "Example: yay -S swww socat jq gum fzf chafa"
     exit 1
 fi
 echo "All dependencies found."

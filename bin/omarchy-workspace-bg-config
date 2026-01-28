@@ -89,8 +89,8 @@ configure_animations() {
     if [ -z "$TYPE" ]; then return; fi
 
     if [ "$TYPE" == "Blur (Preset)" ]; then
-        # Special preset that mimics a blur feel using grow and bezier curves
-        NEW_ARGS="--transition-type grow --transition-duration 1.0 --transition-fps 60 --transition-pos 0.5,0.5 --transition-bezier 0.65,0,0.35,1"
+        # Special preset that mimics a blur feel using fade and bezier curves
+        NEW_ARGS="--transition-type fade --transition-duration 1.0 --transition-fps 60 --transition-bezier 0.65,0,0.35,1"
     else
         echo "Enter Duration (seconds):"
         DURATION=$(gum input --placeholder "0.5" --value "0.5")

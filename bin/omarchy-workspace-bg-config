@@ -126,11 +126,55 @@ view_config() {
     gum input --placeholder "Press Enter to return..." > /dev/null
 }
 
+configure_autostart() {
+    AUTOSTART_FILE="$HOME/.config/hypr/autostart.conf"
+
+    # Check current status
+    if grep -q "omarchy-workspace-bg-daemon" "$AUTOSTART_FILE" 2>/dev/null; then
+        CURRENT_STATUS="Enabled"
+    else
+        CURRENT_STATUS="Disabled"
+    fi
+
+    echo "Autostart is currently: $CURRENT_STATUS"
+    ACTION=$(gum choose "Enable Autostart" "Disable Autostart" "Cancel")
+
+    case "$ACTION" in
+        "Enable Autostart")
+            if [ "$CURRENT_STATUS" == "Enabled" ]; then
+                gum style --foreground 196 "Already enabled!"
+            else
+                if [ ! -f "$AUTOSTART_FILE" ]; then
+                    touch "$AUTOSTART_FILE"
+                fi
+                echo "" >> "$AUTOSTART_FILE"
+                echo "# Omarchy Workspace Backgrounds" >> "$AUTOSTART_FILE"
+                echo "exec-once = omarchy-workspace-bg-daemon" >> "$AUTOSTART_FILE"
+                gum style --foreground 76 "✓ Enabled autostart"
+            fi
+            ;;
+        "Disable Autostart")
+            if [ "$CURRENT_STATUS" == "Disabled" ]; then
+                gum style --foreground 196 "Already disabled!"
+            else
+                # Use sed to remove the lines
+                sed -i '\|omarchy-workspace-bg-daemon|d' "$AUTOSTART_FILE"
+                sed -i '\|# Omarchy Workspace Backgrounds|d' "$AUTOSTART_FILE"
+                gum style --foreground 76 "✓ Disabled autostart"
+            fi
+            ;;
+        "Cancel")
+            return
+            ;;
+    esac
+    sleep 1
+}
+
 # Main Loop
 while true; do
     show_header
 
-    CHOICE=$(gum choose "Configure Workspace Wallpaper" "Configure Animations" "View Current Config" "Restart Daemon" "Stop Daemon" "Exit" --height 10 --header "Select an action")
+    CHOICE=$(gum choose "Configure Workspace Wallpaper" "Configure Animations" "Configure Autostart" "View Current Config" "Restart Daemon" "Stop Daemon" "Exit" --height 12 --header "Select an action")
 
     case "$CHOICE" in
         "Configure Workspace Wallpaper")
@@ -138,6 +182,9 @@ while true; do
             ;;
         "Configure Animations")
             configure_animations
+            ;;
+        "Configure Autostart")
+            configure_autostart
             ;;
         "View Current Config")
             view_config

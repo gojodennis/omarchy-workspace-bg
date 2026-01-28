@@ -72,6 +72,11 @@ apply_wallpaper() {
 
     if [ -n "$bg" ]; then
         swww img "$bg" $TRANSITION_ARGS
+
+        # Run wallpaper-update hook if it exists
+        if [ -x "$HOME/.config/omarchy/hooks/wallpaper-update" ]; then
+            "$HOME/.config/omarchy/hooks/wallpaper-update" "$bg" &
+        fi
     fi
 }
 

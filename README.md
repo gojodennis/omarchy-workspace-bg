@@ -5,7 +5,10 @@ A lightweight utility for Hyprland users (specifically designed for Omarchy) to 
 ## Features
 
 - 🖼️ **Per-Workspace Wallpapers**: Assign a unique background image to every workspace.
+- 🎬 **Animated Wallpapers**: Supports GIFs natively.
 - ✨ **Smooth Transitions**: Uses `swww` for seamless crossfading between backgrounds.
+- 🌈 **Customizable Animations**: Choose from grow, wipe, wave, fade, and more with adjustable speed and FPS.
+- 👁️ **Visual Preview**: See thumbnails of your wallpapers directly in the terminal before selecting them (requires `fzf` + `chafa`).
 - 🛠️ **TUI Configuration**: Includes a terminal user interface (`omarchy-workspace-bg-config`) for easy setup.
 - 🚀 **Performance**: Efficient event-driven daemon that only wakes up on workspace changes.
 
@@ -16,6 +19,8 @@ A lightweight utility for Hyprland users (specifically designed for Omarchy) to 
 - **socat**: To listen to Hyprland socket events.
 - **jq**: For JSON parsing.
 - **gum**: For the TUI configuration tool.
+- **fzf**: For the file picker.
+- **chafa**: For image previews in the file picker.
 
 ## Installation
 

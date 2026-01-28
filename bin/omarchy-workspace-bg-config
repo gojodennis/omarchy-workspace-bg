@@ -61,11 +61,24 @@ configure_all_workspaces() {
 
         # Use fzf with chafa for preview if available, otherwise fallback to gum
         if command -v fzf &> /dev/null && command -v chafa &> /dev/null; then
-             # Find images (png, jpg, jpeg, gif, webp)
+             # Find images and videos
              # We use a subshell to change dir safely for find, but return absolute paths
-             IMAGE_PATH=$(find "$START_DIR" -type f \( -iname "*.png" -o -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.gif" -o -iname "*.webp" \) | \
-                fzf --height 80% --layout=reverse --border --prompt="Select Wallpaper > " \
-                --preview 'chafa -s 60x30 {}' --preview-window=right:50%)
+             IMAGE_PATH=$(find "$START_DIR" -type f \( \
+                -iname "*.png" -o -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.gif" -o -iname "*.webp" \
+                -o -iname "*.mp4" -o -iname "*.webm" -o -iname "*.mkv" -o -iname "*.avi" -o -iname "*.mov" \
+                \) | \
+                fzf --height 80% --layout=reverse --border --prompt="Select Wallpaper (Image/Video) > " \
+                --preview '
+                    file={};
+                    mime=$(file -b --mime-type "$file");
+                    if [[ "$mime" =~ ^video/ ]]; then
+                        # For video, maybe show a thumbnail or just info
+                        # chafa works on video files too (extracts frame)!
+                        chafa -s 60x30 "$file"
+                    else
+                        chafa -s 60x30 "$file"
+                    fi
+                ' --preview-window=right:50%)
         else
              IMAGE_PATH=$(gum file "$START_DIR" --height 15)
         fi
@@ -121,10 +134,17 @@ configure_workspace() {
 
             # Use fzf with chafa for preview if available, otherwise fallback to gum
             if command -v fzf &> /dev/null && command -v chafa &> /dev/null; then
-                 # Find images (png, jpg, jpeg, gif, webp)
-                 IMAGE_PATH=$(find "$START_DIR" -type f \( -iname "*.png" -o -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.gif" -o -iname "*.webp" \) | \
-                    fzf --height 80% --layout=reverse --border --prompt="Select Wallpaper > " \
-                    --preview 'chafa -s 60x30 {}' --preview-window=right:50%)
+                 # Find images and videos
+                 IMAGE_PATH=$(find "$START_DIR" -type f \( \
+                    -iname "*.png" -o -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.gif" -o -iname "*.webp" \
+                    -o -iname "*.mp4" -o -iname "*.webm" -o -iname "*.mkv" -o -iname "*.avi" -o -iname "*.mov" \
+                    \) | \
+                    fzf --height 80% --layout=reverse --border --prompt="Select Wallpaper (Image/Video) > " \
+                    --preview '
+                        file={};
+                        # chafa works on video files too!
+                        chafa -s 60x30 "$file"
+                    ' --preview-window=right:50%)
             else
                  IMAGE_PATH=$(gum file "$START_DIR" --height 15)
             fi

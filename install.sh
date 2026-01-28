@@ -37,6 +37,10 @@ cp bin/omarchy-workspace-bg-config "$INSTALL_DIR/"
 chmod +x "$INSTALL_DIR/omarchy-workspace-bg-daemon"
 chmod +x "$INSTALL_DIR/omarchy-workspace-bg-config"
 
+# Create shortcut 'wallpaper'
+ln -sf "$INSTALL_DIR/omarchy-workspace-bg-config" "$INSTALL_DIR/wallpaper"
+echo "Created alias 'wallpaper' -> 'omarchy-workspace-bg-config'"
+
 # 3. Setup Config Directory
 CONFIG_DIR="$HOME/.config/omarchy/workspace-bg"
 CONFIG_FILE="$CONFIG_DIR/config.conf"
@@ -53,7 +57,7 @@ fi
 
 # 4. Setup Autostart
 AUTOSTART_FILE="$HOME/.config/hypr/autostart.conf"
-DAEMON_CMD="exec-once = omarchy-workspace-bg-daemon"
+DAEMON_CMD="exec-once = $INSTALL_DIR/omarchy-workspace-bg-daemon"
 
 if [ -f "$AUTOSTART_FILE" ]; then
     if grep -q "omarchy-workspace-bg-daemon" "$AUTOSTART_FILE"; then
@@ -78,4 +82,4 @@ else
 fi
 
 echo -e "${GREEN}Installation Complete!${NC}"
-echo "Run 'omarchy-workspace-bg-config' to set up your wallpapers."
+echo "Run 'wallpaper' to set up your wallpapers."

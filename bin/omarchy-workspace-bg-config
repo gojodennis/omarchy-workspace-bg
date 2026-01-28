@@ -17,6 +17,7 @@ show_header() {
     clear
     # Use simpler styling to avoid argument parsing issues
     echo "Omarchy Workspace Backgrounds" | gum style --foreground 212 --border-foreground 212 --border double --align center --width 50 --margin 1 --padding 1 2>/dev/null
+    echo "built by gojodennis" | gum style --foreground 240 --align center --width 50 2>/dev/null
 }
 
 # Helper to reload daemon

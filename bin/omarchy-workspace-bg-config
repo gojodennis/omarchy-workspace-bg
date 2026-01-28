@@ -84,19 +84,24 @@ configure_workspace() {
 
 configure_animations() {
     echo "Select Transition Type:"
-    TYPE=$(gum choose "simple" "grow" "outer" "center" "any" "random" "wipe" "wave" --height 10)
+    TYPE=$(gum choose "simple" "grow" "outer" "center" "any" "random" "wipe" "wave" "Blur (Preset)" --height 12)
 
     if [ -z "$TYPE" ]; then return; fi
 
-    echo "Enter Duration (seconds):"
-    DURATION=$(gum input --placeholder "0.5" --value "0.5")
+    if [ "$TYPE" == "Blur (Preset)" ]; then
+        # Special preset that mimics a blur feel using grow and bezier curves
+        NEW_ARGS="--transition-type grow --transition-duration 1.0 --transition-fps 60 --transition-pos 0.5,0.5 --transition-bezier 0.65,0,0.35,1"
+    else
+        echo "Enter Duration (seconds):"
+        DURATION=$(gum input --placeholder "0.5" --value "0.5")
 
-    echo "Enter FPS:"
-    FPS=$(gum input --placeholder "60" --value "60")
+        echo "Enter FPS:"
+        FPS=$(gum input --placeholder "60" --value "60")
 
-    # Construct args
-    # defaults: --transition-pos 0.5,0.5 --transition-step 90
-    NEW_ARGS="--transition-type $TYPE --transition-duration $DURATION --transition-fps $FPS --transition-pos 0.5,0.5 --transition-step 90"
+        # Construct args
+        # defaults: --transition-pos 0.5,0.5 --transition-step 90
+        NEW_ARGS="--transition-type $TYPE --transition-duration $DURATION --transition-fps $FPS --transition-pos 0.5,0.5 --transition-step 90"
+    fi
 
     # Save to config
     # Remove existing line if present

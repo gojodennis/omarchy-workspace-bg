@@ -26,7 +26,7 @@ A lightweight utility for Hyprland users (specifically designed for Omarchy) to 
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/omarchy-workspace-bg.git
+   git clone https://github.com/gojodennis/omarchy-workspace-bg.git
    cd omarchy-workspace-bg
    ```
 

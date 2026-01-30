@@ -1,5 +1,20 @@
 #!/bin/bash
 
+# Debug logging
+LOG_FILE="/tmp/omarchy-bg-daemon.log"
+exec 1>>"$LOG_FILE" 2>&1
+
+# Singleton Check: Kill other instances of this script
+SCRIPT_NAME=$(basename "$0")
+for pid in $(pgrep -f "$SCRIPT_NAME"); do
+    if [ "$pid" != "$$" ]; then
+        echo "Killing existing instance: $pid"
+        kill "$pid" 2>/dev/null
+    fi
+done
+
+echo "--- Daemon started at $(date) with PID $$ ---"
+
 # Configuration
 CONFIG_DIR="$HOME/.config/omarchy/workspace-bg"
 CONFIG_FILE="$CONFIG_DIR/config.conf"
@@ -16,10 +31,22 @@ fi
 
 TRANSITION_ARGS="${TRANSITION_ARGS:-${FILE_TRANSITION:-$DEFAULT_TRANSITION}}"
 
+# Check dependencies
+for cmd in swww socat jq; do
+    if ! command -v $cmd &> /dev/null; then
+        echo "Error: $cmd is required but not installed."
+        notify-send "Omarchy Workspace BG" "Error: $cmd not found"
+        exit 1
+    fi
+done
+
 # Check optional dependencies
 HAS_MPVPAPER=false
 if command -v mpvpaper &> /dev/null; then
     HAS_MPVPAPER=true
+    echo "mpvpaper found, video support enabled"
+else
+    echo "mpvpaper not found, video support disabled"
 fi
 
 # Ensure config directory exists
@@ -32,6 +59,7 @@ if [ -L "$DEFAULT_BG_LINK" ]; then
 elif [ -f "$DEFAULT_BG_LINK" ]; then
     DEFAULT_BG="$DEFAULT_BG_LINK"
 fi
+echo "Default BG: $DEFAULT_BG"
 
 # Kill conflicting wallpaper daemons (optional, maybe user wants to manage this manually, but for omarchy integration strictly:
 pkill swaybg 2>/dev/null
@@ -40,6 +68,7 @@ pkill hyprpaper 2>/dev/null
 
 # Check if swww-daemon is running, if not start it
 if ! pgrep -x "swww-daemon" > /dev/null; then
+    echo "Starting swww-daemon..."
     swww-daemon &
     sleep 0.5
 fi
@@ -84,58 +113,57 @@ get_monitor_for_workspace() {
     local ws=$1
     # Check if workspace is active and on which monitor
     # hyprctl workspaces lists all workspaces
+    # We use -r for raw output to avoid extra quotes if using jq -r
     hyprctl workspaces -j | jq -r ".[] | select(.id == $ws) | .monitor"
-}
-
-# Helper to find all monitors
-get_all_monitors() {
-    hyprctl monitors -j | jq -r '.[].name'
 }
 
 # Apply wallpaper for a specific workspace
 apply_wallpaper() {
     local ws=$1
+    echo "Applying wallpaper for Workspace $ws..."
+
     local bg=$(get_wallpaper_for_workspace "$ws")
+    echo "  Target BG: $bg"
 
     if [ -n "$bg" ]; then
         local mon=$(get_monitor_for_workspace "$ws")
-
-        # If workspace is not currently active on any monitor (it's hidden/inactive),
-        # we don't strictly need to do anything until it becomes visible.
-        # But if it IS visible, we must update it.
-
-        # Fallback: if we can't find monitor (maybe it's not created yet or logic failed),
-        # try to apply to all or focused? No, stick to target if possible.
+        echo "  Monitor: $mon"
 
         # If no monitor found, maybe just use focused one if it's the current workspace
         if [ -z "$mon" ]; then
              local current_ws=$(hyprctl activeworkspace -j | jq -r '.id')
              if [ "$ws" == "$current_ws" ]; then
                  mon=$(hyprctl activeworkspace -j | jq -r '.monitor')
+                 echo "  Using focused monitor: $mon"
              fi
         fi
 
         if $HAS_MPVPAPER && is_video "$bg"; then
+            echo "  Type: Video"
             # Video Wallpaper Logic
             if [ -n "$mon" ]; then
-                # Kill any existing mpvpaper on this monitor
-                # Use strict pattern matching to avoid killing unrelated processes
-                # Pattern: mpvpaper ... <monitor_name> ...
-                # pkill -f matches full command line.
+                # Always kill existing mpvpaper on this monitor first
+                # This handles switching from video -> video as well
+                echo "  Killing existing mpvpaper on $mon..."
                 pkill -f "mpvpaper.*$mon" 2>/dev/null
 
-                # Wait a tiny bit for cleanup
-                sleep 0.1
+                # Wait a tiny bit for cleanup to avoid race conditions
+                sleep 0.2
 
                 # Start new mpvpaper
-                # We fork it so it runs in background
-                # Using nohup to detach completely
-                # Using verbose output for debugging if needed, but suppressed here
+                echo "  Starting mpvpaper..."
+                # Using nohup to detach completely so it survives shell closures
+                # Redirect output to prevent hang
                 nohup mpvpaper -o "no-audio loop" "$mon" "$bg" >/dev/null 2>&1 &
+                echo "  mpvpaper started with PID $!"
+            else
+                echo "  Error: No monitor found for video wallpaper"
             fi
         else
+            echo "  Type: Image"
             # Image Wallpaper Logic
             if [ -n "$mon" ]; then
+                 # Kill video wallpaper if we are switching to image
                  pkill -f "mpvpaper.*$mon" 2>/dev/null
             fi
 
@@ -143,13 +171,19 @@ apply_wallpaper() {
 
             # Run wallpaper-update hook if it exists
             if [ -x "$HOME/.config/omarchy/hooks/wallpaper-update" ]; then
+                echo "  Running hook..."
                 "$HOME/.config/omarchy/hooks/wallpaper-update" "$bg" &
             fi
         fi
+    else
+        echo "  No wallpaper found."
     fi
 }
 
 # Initial setup
+# Wait a moment for Omarchy to finish its startup (and theme restore)
+sleep 2
+
 CURRENT_WS=$(hyprctl activeworkspace -j | jq -r '.id')
 apply_wallpaper "$CURRENT_WS"
 
@@ -168,15 +202,47 @@ handle_socket_event() {
     fi
 }
 
-# Listen to Hyprland socket
-SOC_PATH="$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock"
-
-if [ ! -S "$SOC_PATH" ]; then
-    echo "Error: Hyprland socket not found at $SOC_PATH" >&2
-    exit 1
+# Robust Hyprland Signature Detection
+if [ -z "$HYPRLAND_INSTANCE_SIGNATURE" ]; then
+    # Try to find the signature directory
+    # We look for a directory in /run/user/$UID/hypr/ that contains a .socket2.sock
+    # We take the most recent one
+    POSSIBLE_SIG=$(ls -t "$XDG_RUNTIME_DIR/hypr/" | head -n 1)
+    if [ -n "$POSSIBLE_SIG" ]; then
+        export HYPRLAND_INSTANCE_SIGNATURE="$POSSIBLE_SIG"
+        echo "Detected Hyprland Instance: $HYPRLAND_INSTANCE_SIGNATURE"
+    fi
 fi
 
-echo "Listening for workspace changes..."
-socat -U - UNIX-CONNECT:"$SOC_PATH" | while read -r line; do
-    handle_socket_event "$line"
+# Determine Socket Path
+SOC_PATH="$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock"
+
+# Main Loop with Auto-Restart for socat and Socket Detection
+echo "Starting main event loop..."
+while true; do
+    # Check for socket existence
+    if [ ! -S "$SOC_PATH" ]; then
+        echo "Socket not found at $SOC_PATH. Searching..."
+        # Try to find it again
+        POSSIBLE_SIG=$(ls -t "$XDG_RUNTIME_DIR/hypr/" 2>/dev/null | head -n 1)
+        if [ -n "$POSSIBLE_SIG" ]; then
+            export HYPRLAND_INSTANCE_SIGNATURE="$POSSIBLE_SIG"
+            SOC_PATH="$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock"
+        fi
+
+        if [ ! -S "$SOC_PATH" ]; then
+            echo "Still cannot find socket. Retrying in 3 seconds..."
+            sleep 3
+            continue
+        fi
+        echo "Found socket at $SOC_PATH"
+    fi
+
+    echo "Listening for workspace changes on $SOC_PATH..."
+    socat -U - UNIX-CONNECT:"$SOC_PATH" | while read -r line; do
+        handle_socket_event "$line"
+    done
+
+    echo "Socket connection lost. Retrying in 2 seconds..."
+    sleep 2
 done

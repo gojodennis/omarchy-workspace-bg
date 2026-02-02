@@ -110,16 +110,16 @@ if [ -f "$AUTOSTART_FILE" ]; then
 
     # Add daemon startup if not present
     if ! grep -q "omarchy-workspace-bg-daemon" "$AUTOSTART_FILE"; then
-        echo "exec-once = omarchy-workspace-bg-daemon" >> "$AUTOSTART_FILE"
+        echo "exec-once = $HOME/.local/bin/omarchy-workspace-bg-daemon" >> "$AUTOSTART_FILE"
         success "Added daemon to autostart.conf"
     else
         info "Daemon already in autostart.conf"
     fi
 else
     # Create new autostart.conf
-    cat > "$AUTOSTART_FILE" << 'EOF'
+    cat > "$AUTOSTART_FILE" << EOF
 exec-once = pkill swaybg
-exec-once = omarchy-workspace-bg-daemon
+exec-once = $HOME/.local/bin/omarchy-workspace-bg-daemon
 EOF
     success "Created autostart.conf"
 fi

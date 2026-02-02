@@ -27,9 +27,13 @@ DEFAULT_TRANSITION="--transition-type grow --transition-pos 0.5,0.5 --transition
 # Load transition args from config if present
 if [ -f "$CONFIG_FILE" ]; then
     FILE_TRANSITION=$(grep "^TRANSITION_ARGS=" "$CONFIG_FILE" | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+    # Load slideshow interval (in minutes), default 10
+    SLIDESHOW_INTERVAL=$(grep "^SLIDESHOW_INTERVAL=" "$CONFIG_FILE" | cut -d'=' -f2- | tr -d '"' | tr -d "'")
 fi
 
 TRANSITION_ARGS="${TRANSITION_ARGS:-${FILE_TRANSITION:-$DEFAULT_TRANSITION}}"
+SLIDESHOW_INTERVAL="${SLIDESHOW_INTERVAL:-10}"
+SLIDESHOW_SECONDS=$((SLIDESHOW_INTERVAL * 60))
 
 # Check dependencies
 for cmd in swww socat jq; do
@@ -97,6 +101,24 @@ get_wallpaper_for_workspace() {
     if [ -f "$CONFIG_FILE" ]; then
         # Format: workspace_id=/path/to/image
         bg=$(grep "^${ws}=" "$CONFIG_FILE" | cut -d'=' -f2-)
+    fi
+
+    # Folder Support: Pick random file if bg is a directory
+    if [ -d "$bg" ]; then
+        # Find images/videos (case insensitive extensions)
+        # We assume standard image/video types supported by swww/mpvpaper
+        local files=($(find -L "$bg" -maxdepth 1 -type f | grep -E -i "\.(jpe?g|png|gif|webp|bmp|mp4|webm|mkv|mov|avi)$"))
+        local count=${#files[@]}
+
+        if [ $count -gt 0 ]; then
+            # Pick random index
+            local index=$((RANDOM % count))
+            bg="${files[$index]}"
+            echo "  Selected random file from folder: $bg"
+        else
+            echo "  Warning: No valid media files found in directory $bg"
+            bg=""
+        fi
     fi
 
     if [ -z "$bg" ] || [ ! -f "$bg" ]; then
@@ -184,6 +206,9 @@ apply_wallpaper() {
 # Wait a moment for Omarchy to finish its startup (and theme restore)
 sleep 2
 
+# Ensure swaybg is dead (handling startup race conditions)
+pkill swaybg 2>/dev/null
+
 CURRENT_WS=$(hyprctl activeworkspace -j | jq -r '.id')
 apply_wallpaper "$CURRENT_WS"
 
@@ -219,6 +244,8 @@ SOC_PATH="$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock"
 
 # Main Loop with Auto-Restart for socat and Socket Detection
 echo "Starting main event loop..."
+LAST_WALLPAPER_CHANGE=$(date +%s)
+
 while true; do
     # Check for socket existence
     if [ ! -S "$SOC_PATH" ]; then
@@ -238,11 +265,62 @@ while true; do
         echo "Found socket at $SOC_PATH"
     fi
 
-    echo "Listening for workspace changes on $SOC_PATH..."
-    socat -U - UNIX-CONNECT:"$SOC_PATH" | while read -r line; do
-        handle_socket_event "$line"
+    echo "Listening for events on $SOC_PATH..."
+
+    # Use a file descriptor for reading from socat
+    # We use process substitution to feed socat output into a file descriptor
+    exec 3< <(socat -U - UNIX-CONNECT:"$SOC_PATH")
+
+    while true; do
+        # Read with timeout to allow slideshow checks
+        # Timeout doesn't need to be 1s, can be larger, but 1s is responsive enough
+        if read -r -t 1 -u 3 line; then
+            # Got an event from Hyprland
+            handle_socket_event "$line"
+            # Update timestamp on workspace switch too, to reset slideshow timer
+            if [[ "$line" == "workspace>>"* ]]; then
+                LAST_WALLPAPER_CHANGE=$(date +%s)
+            fi
+        else
+            # Check exit status of read
+            # > 128 means timeout (normal), other non-zero means EOF (socket closed)
+            EXIT_CODE=$?
+            if [ $EXIT_CODE -ne 142 ] && [ $EXIT_CODE -ne 0 ]; then
+                echo "Socket connection lost (EOF). Reconnecting..."
+                break
+            fi
+
+            # Slideshow Check
+            NOW=$(date +%s)
+            ELAPSED=$((NOW - LAST_WALLPAPER_CHANGE))
+
+            if [ $ELAPSED -ge $SLIDESHOW_SECONDS ]; then
+                # Time to rotate?
+                # We check if current workspace has a folder configured
+                CURRENT_WS=$(hyprctl activeworkspace -j | jq -r '.id')
+
+                # We need to know if it's a folder without re-reading everything
+                # For simplicity, we just call apply_wallpaper, and let it decide
+                # But we should only force update if it's a directory
+
+                # Check config for this workspace
+                BG_PATH=""
+                if [ -f "$CONFIG_FILE" ]; then
+                    BG_PATH=$(grep "^${CURRENT_WS}=" "$CONFIG_FILE" | cut -d'=' -f2-)
+                fi
+
+                if [ -d "$BG_PATH" ]; then
+                    echo "Slideshow timer triggered for Workspace $CURRENT_WS"
+                    apply_wallpaper "$CURRENT_WS"
+                    LAST_WALLPAPER_CHANGE=$NOW
+                fi
+            fi
+        fi
     done
 
-    echo "Socket connection lost. Retrying in 2 seconds..."
+    # Close file descriptor
+    exec 3<&-
+
+    echo "Retrying connection in 2 seconds..."
     sleep 2
 done

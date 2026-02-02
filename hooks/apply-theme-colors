@@ -1,0 +1,544 @@
+#!/bin/bash
+
+# Configuration
+THEME_NAME_FILE="$HOME/.config/omarchy/current/theme.name"
+CURRENT_THEME_DIR="$HOME/.config/omarchy/current/theme"
+COLORS_FILE="$CURRENT_THEME_DIR/colors.toml"
+TEMPLATES_DIR="$HOME/.config/omarchy/themed"
+THEMES_ROOT="$HOME/.config/omarchy/themes"
+
+# Read current theme name
+if [ -f "$THEME_NAME_FILE" ]; then
+    THEME_NAME=$(cat "$THEME_NAME_FILE")
+else
+    THEME_NAME="default"
+fi
+
+THEME_SRC="$THEMES_ROOT/$THEME_NAME"
+
+if [ ! -f "$COLORS_FILE" ]; then
+    echo "No colors.toml found in current theme."
+    exit 1
+fi
+
+echo "Applying theme colors for '$THEME_NAME' from $COLORS_FILE..."
+
+# Extract colors function - handles both flat and sectioned TOML formats
+get_color() {
+    local key=$1
+    # Try to find "key = " pattern (works for both flat and sectioned TOML)
+    local val=$(grep -E "^$key\s*=" "$COLORS_FILE" | head -1 | sed 's/.*=\s*"\([^"]*\)".*/\1/')
+    echo "$val"
+}
+
+# Helper to convert hex to rgb
+hex_to_rgb() {
+    local hex="${1#\#}"
+    if [ -n "$hex" ] && [ ${#hex} -eq 6 ]; then
+        printf "%d,%d,%d" "0x${hex:0:2}" "0x${hex:2:2}" "0x${hex:4:2}"
+    else
+        echo "0,0,0"
+    fi
+}
+
+strip_hash() {
+    echo "${1#\#}"
+}
+
+# Load Colors from Wallust generated file
+# Support both old format (background/foreground/color0-15) and new format (bg/fg/black/red/etc)
+
+# Primary colors - try new format first, fallback to old
+bg=$(get_color "bg")
+[ -z "$bg" ] && bg=$(get_color "background")
+[ -z "$bg" ] && bg="#000000"
+
+fg=$(get_color "fg")
+[ -z "$fg" ] && fg=$(get_color "foreground")
+[ -z "$fg" ] && fg="#FFFFFF"
+
+cursor=$(get_color "cursor")
+[ -z "$cursor" ] && cursor="$fg"
+
+accent=$(get_color "accent")
+[ -z "$accent" ] && accent=$(get_color "blue")
+[ -z "$accent" ] && accent="#888888"
+
+# ANSI Colors - try new named format first, fallback to colorN format
+color0=$(get_color "black"); [ -z "$color0" ] && color0=$(get_color "color0"); [ -z "$color0" ] && color0="$bg"
+color1=$(get_color "red"); [ -z "$color1" ] && color1=$(get_color "color1"); [ -z "$color1" ] && color1="#FF0000"
+color2=$(get_color "green"); [ -z "$color2" ] && color2=$(get_color "color2"); [ -z "$color2" ] && color2="#00FF00"
+color3=$(get_color "yellow"); [ -z "$color3" ] && color3=$(get_color "color3"); [ -z "$color3" ] && color3="#FFFF00"
+color4=$(get_color "blue"); [ -z "$color4" ] && color4=$(get_color "color4"); [ -z "$color4" ] && color4="#0000FF"
+color5=$(get_color "magenta"); [ -z "$color5" ] && color5=$(get_color "color5"); [ -z "$color5" ] && color5="#FF00FF"
+color6=$(get_color "cyan"); [ -z "$color6" ] && color6=$(get_color "color6"); [ -z "$color6" ] && color6="#00FFFF"
+color7=$(get_color "white"); [ -z "$color7" ] && color7=$(get_color "color7"); [ -z "$color7" ] && color7="#FFFFFF"
+
+# Bright colors
+color8=$(get_color "bright_black"); [ -z "$color8" ] && color8=$(get_color "color8"); [ -z "$color8" ] && color8="#888888"
+color9=$(get_color "bright_red"); [ -z "$color9" ] && color9=$(get_color "color9"); [ -z "$color9" ] && color9="#FF8888"
+color10=$(get_color "bright_green"); [ -z "$color10" ] && color10=$(get_color "color10"); [ -z "$color10" ] && color10="#88FF88"
+color11=$(get_color "bright_yellow"); [ -z "$color11" ] && color11=$(get_color "color11"); [ -z "$color11" ] && color11="#FFFF88"
+color12=$(get_color "bright_blue"); [ -z "$color12" ] && color12=$(get_color "color12"); [ -z "$color12" ] && color12="#8888FF"
+color13=$(get_color "bright_magenta"); [ -z "$color13" ] && color13=$(get_color "color13"); [ -z "$color13" ] && color13="#FF88FF"
+color14=$(get_color "bright_cyan"); [ -z "$color14" ] && color14=$(get_color "color14"); [ -z "$color14" ] && color14="#88FFFF"
+color15=$(get_color "bright_white"); [ -z "$color15" ] && color15=$(get_color "color15"); [ -z "$color15" ] && color15="#FFFFFF"
+
+# Mappings for Omarchy CSS variables (oma0 - oma15)
+# Mapping Strategy: Use Wallust colors to populate Omarchy semantic palette
+oma0="$bg"              # Darkest (Background)
+oma1="$color0"          # Dark (Black)
+oma2="$color8"          # Darker Grey (Bright Black)
+oma3="$color8"          # Grey
+oma4="$color7"          # Light Grey (White)
+oma5="$fg"              # Foreground
+oma6="$color15"         # Bright White
+oma7="$color8"          # Accent Dark / Muted
+oma8="$accent"          # Primary Accent
+oma9="$color4"          # Secondary Accent (Blue)
+oma10="$color6"         # Tertiary Accent (Cyan)
+oma11="$color1"         # Red/Critical
+oma12="$color11"        # Orange/Secondary (using Bright Yellow as approx)
+oma13="$color3"         # Yellow/Warning
+oma14="$color2"         # Green/Success
+oma15="$color5"         # Purple
+
+# Load User Overrides
+OVERRIDES_FILE="$HOME/.config/omarchy/workspace-backgrounds/overrides.conf"
+if [ -f "$OVERRIDES_FILE" ]; then
+    echo "Loading color overrides from $OVERRIDES_FILE..."
+    source "$OVERRIDES_FILE"
+fi
+
+# Stripped versions for Hyprland (no hash)
+oma0_s=$(strip_hash "$oma0")
+oma1_s=$(strip_hash "$oma1")
+oma2_s=$(strip_hash "$oma2")
+oma3_s=$(strip_hash "$oma3")
+oma4_s=$(strip_hash "$oma4")
+oma5_s=$(strip_hash "$oma5")
+oma6_s=$(strip_hash "$oma6")
+oma7_s=$(strip_hash "$oma7")
+oma8_s=$(strip_hash "$oma8")
+oma9_s=$(strip_hash "$oma9")
+oma10_s=$(strip_hash "$oma10")
+oma11_s=$(strip_hash "$oma11")
+oma12_s=$(strip_hash "$oma12")
+oma13_s=$(strip_hash "$oma13")
+oma14_s=$(strip_hash "$oma14")
+oma15_s=$(strip_hash "$oma15")
+
+# Function to apply template (Legacy/Fallback mode)
+apply_template() {
+    local tpl_file="$1"
+    local out_file="$2"
+
+    local bg_rgb=$(hex_to_rgb "$bg"); local bg_strip=$(strip_hash "$bg")
+    local fg_rgb=$(hex_to_rgb "$fg"); local fg_strip=$(strip_hash "$fg")
+    local accent_rgb=$(hex_to_rgb "$accent"); local accent_strip=$(strip_hash "$accent")
+
+    sed \
+        -e "s|{{ background }}|$bg|g" \
+        -e "s|{{ background_rgb }}|$bg_rgb|g" \
+        -e "s|{{ background_strip }}|$bg_strip|g" \
+        -e "s|{{ foreground }}|$fg|g" \
+        -e "s|{{ foreground_rgb }}|$fg_rgb|g" \
+        -e "s|{{ foreground_strip }}|$fg_strip|g" \
+        -e "s|{{ cursor }}|$cursor|g" \
+        -e "s|{{ selection_foreground }}|$fg|g" \
+        -e "s|{{ selection_background }}|$accent|g" \
+        -e "s|{{ accent }}|$accent|g" \
+        -e "s|{{ accent_rgb }}|$accent_rgb|g" \
+        -e "s|{{ accent_strip }}|$accent_strip|g" \
+        -e "s|{{ color0 }}|$color0|g" \
+        -e "s|{{ color1 }}|$color1|g" \
+        -e "s|{{ color2 }}|$color2|g" \
+        -e "s|{{ color3 }}|$color3|g" \
+        -e "s|{{ color4 }}|$color4|g" \
+        -e "s|{{ color5 }}|$color5|g" \
+        -e "s|{{ color6 }}|$color6|g" \
+        -e "s|{{ color7 }}|$color7|g" \
+        -e "s|{{ color8 }}|$color8|g" \
+        -e "s|{{ color9 }}|$color9|g" \
+        -e "s|{{ color10 }}|$color10|g" \
+        -e "s|{{ color11 }}|$color11|g" \
+        -e "s|{{ color12 }}|$color12|g" \
+        -e "s|{{ color13 }}|$color13|g" \
+        -e "s|{{ color14 }}|$color14|g" \
+        -e "s|{{ color15 }}|$color15|g" \
+        "$tpl_file" > "$out_file"
+}
+
+# Function to inject colors into CSS
+inject_css() {
+    local src="$1"
+    local dest="$2"
+
+    echo "Injecting colors into $dest (from $src)..."
+    cp "$src" "$dest"
+
+    # Replace @define-color variable #HEX;
+    # We use a comprehensive list of replacements
+    sed -i -E \
+        -e "s/(@define-color\s+oma0\s+)#[0-9A-Fa-f]{6}/\1$oma0/" \
+        -e "s/(@define-color\s+oma1\s+)#[0-9A-Fa-f]{6}/\1$oma1/" \
+        -e "s/(@define-color\s+oma2\s+)#[0-9A-Fa-f]{6}/\1$oma2/" \
+        -e "s/(@define-color\s+oma3\s+)#[0-9A-Fa-f]{6}/\1$oma3/" \
+        -e "s/(@define-color\s+oma4\s+)#[0-9A-Fa-f]{6}/\1$oma4/" \
+        -e "s/(@define-color\s+oma5\s+)#[0-9A-Fa-f]{6}/\1$oma5/" \
+        -e "s/(@define-color\s+oma6\s+)#[0-9A-Fa-f]{6}/\1$oma6/" \
+        -e "s/(@define-color\s+oma7\s+)#[0-9A-Fa-f]{6}/\1$oma7/" \
+        -e "s/(@define-color\s+oma8\s+)#[0-9A-Fa-f]{6}/\1$oma8/" \
+        -e "s/(@define-color\s+oma9\s+)#[0-9A-Fa-f]{6}/\1$oma9/" \
+        -e "s/(@define-color\s+oma10\s+)#[0-9A-Fa-f]{6}/\1$oma10/" \
+        -e "s/(@define-color\s+oma11\s+)#[0-9A-Fa-f]{6}/\1$oma11/" \
+        -e "s/(@define-color\s+oma12\s+)#[0-9A-Fa-f]{6}/\1$oma12/" \
+        -e "s/(@define-color\s+oma13\s+)#[0-9A-Fa-f]{6}/\1$oma13/" \
+        -e "s/(@define-color\s+oma14\s+)#[0-9A-Fa-f]{6}/\1$oma14/" \
+        -e "s/(@define-color\s+oma15\s+)#[0-9A-Fa-f]{6}/\1$oma15/" \
+        -e "s/(@define-color\s+background\s+)#[0-9A-Fa-f]{6}/\1$bg/" \
+        -e "s/(@define-color\s+bg\s+)#[0-9A-Fa-f]{6}/\1$bg/" \
+        -e "s/(@define-color\s+foreground\s+)#[0-9A-Fa-f]{6}/\1$fg/" \
+        -e "s/(@define-color\s+fg\s+)#[0-9A-Fa-f]{6}/\1$fg/" \
+        -e "s/(@define-color\s+cursor\s+)#[0-9A-Fa-f]{6}/\1$cursor/" \
+        -e "s/(@define-color\s+base\s+)#[0-9A-Fa-f]{6}/\1$bg/" \
+        -e "s/(@define-color\s+surface\s+)#[0-9A-Fa-f]{6}/\1$color0/" \
+        -e "s/(@define-color\s+overlay\s+)#[0-9A-Fa-f]{6}/\1$color8/" \
+        -e "s/(@define-color\s+text\s+)#[0-9A-Fa-f]{6}/\1$fg/" \
+        -e "s/(@define-color\s+subtext\s+)#[0-9A-Fa-f]{6}/\1$color7/" \
+        -e "s/(@define-color\s+accent\s+)#[0-9A-Fa-f]{6}/\1$accent/" \
+        -e "s/(@define-color\s+black\s+)#[0-9A-Fa-f]{6}/\1$color0/" \
+        -e "s/(@define-color\s+red\s+)#[0-9A-Fa-f]{6}/\1$color1/" \
+        -e "s/(@define-color\s+green\s+)#[0-9A-Fa-f]{6}/\1$color2/" \
+        -e "s/(@define-color\s+yellow\s+)#[0-9A-Fa-f]{6}/\1$color3/" \
+        -e "s/(@define-color\s+blue\s+)#[0-9A-Fa-f]{6}/\1$color4/" \
+        -e "s/(@define-color\s+magenta\s+)#[0-9A-Fa-f]{6}/\1$color5/" \
+        -e "s/(@define-color\s+cyan\s+)#[0-9A-Fa-f]{6}/\1$color6/" \
+        -e "s/(@define-color\s+white\s+)#[0-9A-Fa-f]{6}/\1$color7/" \
+        -e "s/(@define-color\s+bright-black\s+)#[0-9A-Fa-f]{6}/\1$color8/" \
+        -e "s/(@define-color\s+bright-red\s+)#[0-9A-Fa-f]{6}/\1$color9/" \
+        -e "s/(@define-color\s+bright-green\s+)#[0-9A-Fa-f]{6}/\1$color10/" \
+        -e "s/(@define-color\s+bright-yellow\s+)#[0-9A-Fa-f]{6}/\1$color11/" \
+        -e "s/(@define-color\s+bright-blue\s+)#[0-9A-Fa-f]{6}/\1$color12/" \
+        -e "s/(@define-color\s+bright-magenta\s+)#[0-9A-Fa-f]{6}/\1$color13/" \
+        -e "s/(@define-color\s+bright-cyan\s+)#[0-9A-Fa-f]{6}/\1$color14/" \
+        -e "s/(@define-color\s+bright-white\s+)#[0-9A-Fa-f]{6}/\1$color15/" \
+        -e "s/(--color00\s*:\s*)#[0-9A-Fa-f]{6}/\1$oma0/" \
+        -e "s/(--color01\s*:\s*)#[0-9A-Fa-f]{6}/\1$oma1/" \
+        -e "s/(--color02\s*:\s*)#[0-9A-Fa-f]{6}/\1$oma2/" \
+        -e "s/(--color03\s*:\s*)#[0-9A-Fa-f]{6}/\1$oma3/" \
+        -e "s/(--color04\s*:\s*)#[0-9A-Fa-f]{6}/\1$oma4/" \
+        -e "s/(--color05\s*:\s*)#[0-9A-Fa-f]{6}/\1$oma5/" \
+        -e "s/(--color06\s*:\s*)#[0-9A-Fa-f]{6}/\1$oma6/" \
+        -e "s/(--color07\s*:\s*)#[0-9A-Fa-f]{6}/\1$oma4/" \
+        -e "s/(--color08\s*:\s*)#[0-9A-Fa-f]{6}/\1$oma11/" \
+        -e "s/(--color09\s*:\s*)#[0-9A-Fa-f]{6}/\1$oma12/" \
+        -e "s/(--color10\s*:\s*)#[0-9A-Fa-f]{6}/\1$oma13/" \
+        -e "s/(--color11\s*:\s*)#[0-9A-Fa-f]{6}/\1$oma14/" \
+        -e "s/(--color12\s*:\s*)#[0-9A-Fa-f]{6}/\1$oma10/" \
+        -e "s/(--color13\s*:\s*)#[0-9A-Fa-f]{6}/\1$oma9/" \
+        -e "s/(--color14\s*:\s*)#[0-9A-Fa-f]{6}/\1$oma15/" \
+        -e "s/(--color15\s*:\s*)#[0-9A-Fa-f]{6}/\1$oma12/" \
+        "$dest"
+}
+
+# Function to inject colors into TOML (Alacritty)
+inject_toml() {
+    local src="$1"
+    local dest="$2"
+
+    echo "Injecting colors into $dest (from $src)..."
+    cp "$src" "$dest"
+
+    # Replace keys: key = "#HEX"
+    sed -i -E \
+        -e "s/^(background\s*=\s*)\"#[0-9A-Fa-f]{6}\"/\1\"$bg\"/" \
+        -e "s/^(foreground\s*=\s*)\"#[0-9A-Fa-f]{6}\"/\1\"$fg\"/" \
+        -e "s/^(cursor\s*=\s*)\"#[0-9A-Fa-f]{6}\"/\1\"$cursor\"/" \
+        -e "s/^(black\s*=\s*)\"#[0-9A-Fa-f]{6}\"/\1\"$color0\"/" \
+        -e "s/^(red\s*=\s*)\"#[0-9A-Fa-f]{6}\"/\1\"$color1\"/" \
+        -e "s/^(green\s*=\s*)\"#[0-9A-Fa-f]{6}\"/\1\"$color2\"/" \
+        -e "s/^(yellow\s*=\s*)\"#[0-9A-Fa-f]{6}\"/\1\"$color3\"/" \
+        -e "s/^(blue\s*=\s*)\"#[0-9A-Fa-f]{6}\"/\1\"$color4\"/" \
+        -e "s/^(magenta\s*=\s*)\"#[0-9A-Fa-f]{6}\"/\1\"$color5\"/" \
+        -e "s/^(cyan\s*=\s*)\"#[0-9A-Fa-f]{6}\"/\1\"$color6\"/" \
+        -e "s/^(white\s*=\s*)\"#[0-9A-Fa-f]{6}\"/\1\"$color7\"/" \
+        "$dest"
+}
+
+# Function to inject colors into Hyprland config
+inject_hyprland() {
+    local src="$1"
+    local dest="$2"
+
+    echo "Injecting colors into $dest (from $src)..."
+    cp "$src" "$dest"
+
+    # Replace $omaX = rgb(HEX)
+    sed -i -E \
+        -e "s/(\\\$oma0\s*=\s*rgb\()[0-9A-Fa-f]{6}(\))/\1$oma0_s\2/" \
+        -e "s/(\\\$oma1\s*=\s*rgb\()[0-9A-Fa-f]{6}(\))/\1$oma1_s\2/" \
+        -e "s/(\\\$oma2\s*=\s*rgb\()[0-9A-Fa-f]{6}(\))/\1$oma2_s\2/" \
+        -e "s/(\\\$oma3\s*=\s*rgb\()[0-9A-Fa-f]{6}(\))/\1$oma3_s\2/" \
+        -e "s/(\\\$oma4\s*=\s*rgb\()[0-9A-Fa-f]{6}(\))/\1$oma4_s\2/" \
+        -e "s/(\\\$oma5\s*=\s*rgb\()[0-9A-Fa-f]{6}(\))/\1$oma5_s\2/" \
+        -e "s/(\\\$oma6\s*=\s*rgb\()[0-9A-Fa-f]{6}(\))/\1$oma6_s\2/" \
+        -e "s/(\\\$oma7\s*=\s*rgb\()[0-9A-Fa-f]{6}(\))/\1$oma7_s\2/" \
+        -e "s/(\\\$oma8\s*=\s*rgb\()[0-9A-Fa-f]{6}(\))/\1$oma8_s\2/" \
+        -e "s/(\\\$oma9\s*=\s*rgb\()[0-9A-Fa-f]{6}(\))/\1$oma9_s\2/" \
+        -e "s/(\\\$oma10\s*=\s*rgb\()[0-9A-Fa-f]{6}(\))/\1$oma10_s\2/" \
+        -e "s/(\\\$oma11\s*=\s*rgb\()[0-9A-Fa-f]{6}(\))/\1$oma11_s\2/" \
+        -e "s/(\\\$oma12\s*=\s*rgb\()[0-9A-Fa-f]{6}(\))/\1$oma12_s\2/" \
+        -e "s/(\\\$oma13\s*=\s*rgb\()[0-9A-Fa-f]{6}(\))/\1$oma13_s\2/" \
+        -e "s/(\\\$oma14\s*=\s*rgb\()[0-9A-Fa-f]{6}(\))/\1$oma14_s\2/" \
+        -e "s/(\\\$oma15\s*=\s*rgb\()[0-9A-Fa-f]{6}(\))/\1$oma15_s\2/" \
+        "$dest"
+}
+
+# Function to inject colors into CONF (Kitty, Ghostty, Hyprland)
+inject_conf() {
+    local src="$1"
+    local dest="$2"
+
+    echo "Injecting colors into $dest (from $src)..."
+    cp "$src" "$dest"
+
+    # Replace keys: key #HEX or key = #HEX
+    sed -i -E \
+        -e "s/^(background\s+=?\s*)#[0-9A-Fa-f]{6}/\1$bg/" \
+        -e "s/^(foreground\s+=?\s*)#[0-9A-Fa-f]{6}/\1$fg/" \
+        -e "s/^(cursor\s+=?\s*)#[0-9A-Fa-f]{6}/\1$cursor/" \
+        -e "s/^(color0\s+=?\s*)#[0-9A-Fa-f]{6}/\1$color0/" \
+        -e "s/^(color1\s+=?\s*)#[0-9A-Fa-f]{6}/\1$color1/" \
+        -e "s/^(color2\s+=?\s*)#[0-9A-Fa-f]{6}/\1$color2/" \
+        -e "s/^(color3\s+=?\s*)#[0-9A-Fa-f]{6}/\1$color3/" \
+        -e "s/^(color4\s+=?\s*)#[0-9A-Fa-f]{6}/\1$color4/" \
+        -e "s/^(color5\s+=?\s*)#[0-9A-Fa-f]{6}/\1$color5/" \
+        -e "s/^(color6\s+=?\s*)#[0-9A-Fa-f]{6}/\1$color6/" \
+        -e "s/^(color7\s+=?\s*)#[0-9A-Fa-f]{6}/\1$color7/" \
+        -e "s/^(color8\s+=?\s*)#[0-9A-Fa-f]{6}/\1$color8/" \
+        -e "s/^(color9\s+=?\s*)#[0-9A-Fa-f]{6}/\1$color9/" \
+        -e "s/^(color10\s+=?\s*)#[0-9A-Fa-f]{6}/\1$color10/" \
+        -e "s/^(color11\s+=?\s*)#[0-9A-Fa-f]{6}/\1$color11/" \
+        -e "s/^(color12\s+=?\s*)#[0-9A-Fa-f]{6}/\1$color12/" \
+        -e "s/^(color13\s+=?\s*)#[0-9A-Fa-f]{6}/\1$color13/" \
+        -e "s/^(color14\s+=?\s*)#[0-9A-Fa-f]{6}/\1$color14/" \
+        -e "s/^(color15\s+=?\s*)#[0-9A-Fa-f]{6}/\1$color15/" \
+        "$dest"
+}
+
+# Function to inject colors into Hyprlock config
+inject_hyprlock() {
+    local src="$1"
+    local dest="$2"
+
+    local bg_rgb=$(hex_to_rgb "$bg")
+    local fg_rgb=$(hex_to_rgb "$fg")
+    local accent_rgb=$(hex_to_rgb "$accent")
+    local color0_rgb=$(hex_to_rgb "$color0")
+
+    echo "Injecting colors into $dest (from $src)..."
+    cp "$src" "$dest"
+
+    sed -i -E \
+        -e "s/(\\\$background\s*=\s*rgba?\()([0-9]+,\s*[0-9]+,\s*[0-9]+)(,?\s*[0-9.]*\))/\1$bg_rgb\3/" \
+        -e "s/(\\\$foreground\s*=\s*rgba?\()([0-9]+,\s*[0-9]+,\s*[0-9]+)(,?\s*[0-9.]*\))/\1$fg_rgb\3/" \
+        -e "s/(\\\$accent\s*=\s*rgba?\()([0-9]+,\s*[0-9]+,\s*[0-9]+)(,?\s*[0-9.]*\))/\1$accent_rgb\3/" \
+        -e "s/(\\\$color\s*=\s*rgba?\()([0-9]+,\s*[0-9]+,\s*[0-9]+)(,?\s*[0-9.]*\))/\1$bg_rgb\3/" \
+        -e "s/(\\\$inner_color\s*=\s*rgba?\()([0-9]+,\s*[0-9]+,\s*[0-9]+)(,?\s*[0-9.]*\))/\1$bg_rgb\3/" \
+        -e "s/(\\\$outer_color\s*=\s*rgba?\()([0-9]+,\s*[0-9]+,\s*[0-9]+)(,?\s*[0-9.]*\))/\1$accent_rgb\3/" \
+        -e "s/(\\\$font_color\s*=\s*rgba?\()([0-9]+,\s*[0-9]+,\s*[0-9]+)(,?\s*[0-9.]*\))/\1$fg_rgb\3/" \
+        "$dest"
+}
+
+# Function to inject colors into INI (Mako)
+inject_ini() {
+    local src="$1"
+    local dest="$2"
+
+    echo "Injecting colors into $dest (from $src)..."
+    cp "$src" "$dest"
+
+    # Mako uses key=#RRGGBB
+    sed -i -E \
+        -e "s/^(background-color=)#[0-9A-Fa-f]{6}/\1$bg/" \
+        -e "s/^(text-color=)#[0-9A-Fa-f]{6}/\1$fg/" \
+        -e "s/^(border-color=)#[0-9A-Fa-f]{6}/\1$accent/" \
+        "$dest"
+}
+
+# Function to inject colors into Lua (Neovim)
+inject_lua() {
+    local src="$1"
+    local dest="$2"
+
+    echo "Injecting colors into $dest (from $src)..."
+    cp "$src" "$dest"
+
+    # Replace baseXX = "#HEX"
+    sed -i -E \
+        -e "s/(base00\s*=\s*)\"#[0-9A-Fa-f]{6}\"/\1\"$oma0\"/" \
+        -e "s/(base01\s*=\s*)\"#[0-9A-Fa-f]{6}\"/\1\"$oma1\"/" \
+        -e "s/(base02\s*=\s*)\"#[0-9A-Fa-f]{6}\"/\1\"$oma2\"/" \
+        -e "s/(base03\s*=\s*)\"#[0-9A-Fa-f]{6}\"/\1\"$oma3\"/" \
+        -e "s/(base04\s*=\s*)\"#[0-9A-Fa-f]{6}\"/\1\"$oma4\"/" \
+        -e "s/(base05\s*=\s*)\"#[0-9A-Fa-f]{6}\"/\1\"$oma5\"/" \
+        -e "s/(base06\s*=\s*)\"#[0-9A-Fa-f]{6}\"/\1\"$oma6\"/" \
+        -e "s/(base07\s*=\s*)\"#[0-9A-Fa-f]{6}\"/\1\"$oma4\"/" \
+        -e "s/(base08\s*=\s*)\"#[0-9A-Fa-f]{6}\"/\1\"$oma11\"/" \
+        -e "s/(base09\s*=\s*)\"#[0-9A-Fa-f]{6}\"/\1\"$oma12\"/" \
+        -e "s/(base0A\s*=\s*)\"#[0-9A-Fa-f]{6}\"/\1\"$oma13\"/" \
+        -e "s/(base0B\s*=\s*)\"#[0-9A-Fa-f]{6}\"/\1\"$oma14\"/" \
+        -e "s/(base0C\s*=\s*)\"#[0-9A-Fa-f]{6}\"/\1\"$oma10\"/" \
+        -e "s/(base0D\s*=\s*)\"#[0-9A-Fa-f]{6}\"/\1\"$oma9\"/" \
+        -e "s/(base0E\s*=\s*)\"#[0-9A-Fa-f]{6}\"/\1\"$oma15\"/" \
+        -e "s/(base0F\s*=\s*)\"#[0-9A-Fa-f]{6}\"/\1\"$oma12\"/" \
+        "$dest"
+}
+
+# Function to inject colors into Fish shell
+inject_fish() {
+    local src="$1"
+    local dest="$2"
+
+    echo "Injecting colors into $dest (from $src)..."
+    cp "$src" "$dest"
+
+    # Replace set -U/-l name '#HEX'
+    # Handle standard names
+    sed -i -E \
+        -e "s/(set -[Ul] background )'#[0-9A-Fa-f]{6}'/\1'$bg'/" \
+        -e "s/(set -[Ul] foreground )'#[0-9A-Fa-f]{6}'/\1'$fg'/" \
+        -e "s/(set -[Ul] cursor )'#[0-9A-Fa-f]{6}'/\1'$cursor'/" \
+        -e "s/(set -[Ul] color0 )'#[0-9A-Fa-f]{6}'/\1'$color0'/" \
+        -e "s/(set -[Ul] color1 )'#[0-9A-Fa-f]{6}'/\1'$color1'/" \
+        -e "s/(set -[Ul] color2 )'#[0-9A-Fa-f]{6}'/\1'$color2'/" \
+        -e "s/(set -[Ul] color3 )'#[0-9A-Fa-f]{6}'/\1'$color3'/" \
+        -e "s/(set -[Ul] color4 )'#[0-9A-Fa-f]{6}'/\1'$color4'/" \
+        -e "s/(set -[Ul] color5 )'#[0-9A-Fa-f]{6}'/\1'$color5'/" \
+        -e "s/(set -[Ul] color6 )'#[0-9A-Fa-f]{6}'/\1'$color6'/" \
+        -e "s/(set -[Ul] color7 )'#[0-9A-Fa-f]{6}'/\1'$color7'/" \
+        -e "s/(set -[Ul] color8 )'#[0-9A-Fa-f]{6}'/\1'$color8'/" \
+        -e "s/(set -[Ul] color9 )'#[0-9A-Fa-f]{6}'/\1'$color9'/" \
+        -e "s/(set -[Ul] color10 )'#[0-9A-Fa-f]{6}'/\1'$color10'/" \
+        -e "s/(set -[Ul] color11 )'#[0-9A-Fa-f]{6}'/\1'$color11'/" \
+        -e "s/(set -[Ul] color12 )'#[0-9A-Fa-f]{6}'/\1'$color12'/" \
+        -e "s/(set -[Ul] color13 )'#[0-9A-Fa-f]{6}'/\1'$color13'/" \
+        -e "s/(set -[Ul] color14 )'#[0-9A-Fa-f]{6}'/\1'$color14'/" \
+        -e "s/(set -[Ul] color15 )'#[0-9A-Fa-f]{6}'/\1'$color15'/" \
+        -e "s/(set -[Ul] color00 )'#[0-9A-Fa-f]{6}'/\1'$oma0'/" \
+        -e "s/(set -[Ul] color01 )'#[0-9A-Fa-f]{6}'/\1'$oma1'/" \
+        -e "s/(set -[Ul] color02 )'#[0-9A-Fa-f]{6}'/\1'$oma2'/" \
+        -e "s/(set -[Ul] color03 )'#[0-9A-Fa-f]{6}'/\1'$oma3'/" \
+        -e "s/(set -[Ul] color04 )'#[0-9A-Fa-f]{6}'/\1'$oma4'/" \
+        -e "s/(set -[Ul] color05 )'#[0-9A-Fa-f]{6}'/\1'$oma5'/" \
+        -e "s/(set -[Ul] color06 )'#[0-9A-Fa-f]{6}'/\1'$oma6'/" \
+        -e "s/(set -[Ul] color07 )'#[0-9A-Fa-f]{6}'/\1'$oma4'/" \
+        -e "s/(set -[Ul] color08 )'#[0-9A-Fa-f]{6}'/\1'$oma11'/" \
+        -e "s/(set -[Ul] color09 )'#[0-9A-Fa-f]{6}'/\1'$oma12'/" \
+        -e "s/(set -[Ul] color0A )'#[0-9A-Fa-f]{6}'/\1'$oma13'/" \
+        -e "s/(set -[Ul] color0B )'#[0-9A-Fa-f]{6}'/\1'$oma14'/" \
+        -e "s/(set -[Ul] color0C )'#[0-9A-Fa-f]{6}'/\1'$oma10'/" \
+        -e "s/(set -[Ul] color0D )'#[0-9A-Fa-f]{6}'/\1'$oma9'/" \
+        -e "s/(set -[Ul] color0E )'#[0-9A-Fa-f]{6}'/\1'$oma15'/" \
+        -e "s/(set -[Ul] color0F )'#[0-9A-Fa-f]{6}'/\1'$oma12'/" \
+        "$dest"
+}
+
+# Iterate over all templates to handle missing theme files
+for tpl in "$TEMPLATES_DIR"/*.tpl; do
+    filename=$(basename "$tpl" .tpl)
+    output_path="$CURRENT_THEME_DIR/$filename"
+
+    # Check if theme has a custom version
+    if [ -f "$THEME_SRC/$filename" ]; then
+        # Determine file type
+        case "$filename" in
+            hyprland.conf)
+                inject_hyprland "$THEME_SRC/$filename" "$output_path"
+                ;;
+            hyprlock.conf)
+                inject_hyprlock "$THEME_SRC/$filename" "$output_path"
+                ;;
+            *.css)
+                inject_css "$THEME_SRC/$filename" "$output_path"
+                ;;
+            *.toml)
+                inject_toml "$THEME_SRC/$filename" "$output_path"
+                ;;
+            *.conf)
+                inject_conf "$THEME_SRC/$filename" "$output_path"
+                ;;
+            *.ini)
+                inject_ini "$THEME_SRC/$filename" "$output_path"
+                ;;
+            *.lua)
+                inject_lua "$THEME_SRC/$filename" "$output_path"
+                ;;
+            *.fish)
+                inject_fish "$THEME_SRC/$filename" "$output_path"
+                ;;
+            *)
+                echo "Copying $filename from theme (no injection support for this type)"
+                cp "$THEME_SRC/$filename" "$output_path"
+                ;;
+        esac
+    else
+        # No theme specific file, use template
+        echo "Generating $filename from template..."
+        apply_template "$tpl" "$output_path"
+    fi
+done
+
+# Also iterate over theme-specific files that might not have a template
+for theme_file in "$THEME_SRC"/*; do
+    [ -e "$theme_file" ] || continue
+    filename=$(basename "$theme_file")
+    output_path="$CURRENT_THEME_DIR/$filename"
+
+    # Skip if we already processed this file (it had a template)
+    if [ -f "$TEMPLATES_DIR/${filename}.tpl" ]; then
+        continue
+    fi
+
+    # Skip directories
+    if [ -d "$theme_file" ]; then
+        continue
+    fi
+
+    # IMPORTANT: Never overwrite colors.toml - it's the wallust-generated source of truth
+    if [ "$filename" = "colors.toml" ]; then
+        continue
+    fi
+
+    # Determine file type and inject
+    case "$filename" in
+        hyprland.conf)
+            inject_hyprland "$theme_file" "$output_path"
+            ;;
+        hyprlock.conf)
+            inject_hyprlock "$theme_file" "$output_path"
+            ;;
+        *.css)
+            inject_css "$theme_file" "$output_path"
+            ;;
+        *.toml)
+            inject_toml "$theme_file" "$output_path"
+            ;;
+        *.conf)
+            inject_conf "$theme_file" "$output_path"
+            ;;
+        *.ini)
+            inject_ini "$theme_file" "$output_path"
+            ;;
+        *.lua)
+            inject_lua "$theme_file" "$output_path"
+            ;;
+        *)
+            echo "Copying extra theme file $filename (no injection)"
+            cp "$theme_file" "$output_path"
+            ;;
+    esac
+done
+
+echo "Theme generation complete."

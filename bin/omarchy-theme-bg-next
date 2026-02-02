@@ -1,0 +1,13 @@
+#!/bin/bash
+# Override the default background switcher to preserve current wallpaper
+# When switching themes, we want to keep the current wallpaper and only update colors
+
+# If called with --force, use the original behavior (for manual wallpaper cycling)
+if [[ "$1" == "--force" ]]; then
+    /home/gojodennis/.local/share/omarchy/bin/omarchy-theme-bg-next
+    exit 0
+fi
+
+# Otherwise, do nothing - keep current wallpaper
+# The workspace daemon will continue using its configured wallpapers
+echo "Wallpaper preserved (use 'omarchy-theme-bg-next --force' to cycle)"
